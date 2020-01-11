@@ -1,0 +1,259 @@
+---
+title: 'Data Science: Capstone Project - Predicting Pulsar Stars'
+author: "Man Chun Hui"
+year: '2020'
+output:
+  pdf_document: 
+    number_sections: true
+abstract: "In this **IDV project**, we used different machine learning algorithms to improve the prediction accuracy of **Pulsars**^[Pulsars are rotating neutron stars observed to have pulses of radiation at very regular intervals that typically range from milliseconds to seconds - https://imagine.gsfc.nasa.gov/science/objects/neutron_stars1.html]. Exploration of the data^[https://www.kaggle.com/pavanraj159/predicting-a-pulsar-star/download] showed it to have prevalence, in favour of non pulsar stars, and that it would be hard to develop manual rules to accurately predict some of the **Pulsars**. The highest **accuracy** of **98.16%** was obtained using the **Decision Trees** algorithm while the highest **F1 Score** of **93%** was also obtained using the **Naive Bayes** algorithm."
+geometry: margin=0.7in
+fontfamily: mathpazo
+fontsize: 11pt
+# spacing: double
+endnote: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if(!require(dslabs)) install.packages("dslabs", repos = "http://cran.us.r-project.org")
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(lubridate)) install.packages("lubridate", repos = "http://cran.us.r-project.org")
+if(!require(matrixStats)) install.packages("matrixStats", repos = "http://cran.us.r-project.org")
+if(!require(knitr)) install.packages("knitr", repos = "http://cran.us.r-project.org")
+if(!require(gridExtra)) install.packages("gridExtra", repos = "http://cran.us.r-project.org")
+if(!require(rpart.plot)) install.packages("rpart.plot", repos = "http://cran.us.r-project.org")
+if(!require(rattle)) install.packages("rattle", repos = "http://cran.us.r-project.org")
+if(!require(RColorBrewer)) install.packages("RColorBrewer", repos = "http://cran.us.r-project.org")
+MyData <- read.csv(file = "pulsar_stars.csv", header = TRUE, sep = ",")
+```
+
+# Introduction
+This data set, HTRU2^[https://www.kaggle.com/pavanraj159/predicting-a-pulsar-star], used in this **project** describes a sample of pulsar candidates collected during the High Time Resolution Universe Survey.
+
+> "Pulsars are a rare type of Neutron star that produce radio emission detectable here on Earth. As pulsars rotate, their emission beam sweeps across the sky, and when this crosses our line of sight, produces a detectable pattern of broadband radio emission. As pulsars rotate rapidly, this pattern repeats periodically. Thus pulsar search involves looking for periodic radio signals with large radio telescopes.
+>
+> Each pulsar produces a slightly different emission pattern, which varies slightly with each rotation. Thus a potential signal detection known as a 'candidate', is averaged over many rotations of the pulsar, as determined by the length of an observation. In the absence of additional info, each candidate could potentially describe a real pulsar. However in practice almost all detections arecaused by radio frequency interference (RFI) and noise, making legitimate signals hard to find."
+>
+> By Dr Robert Lyon^[https://www.kaggle.com/pavanraj159/predicting-a-pulsar-star]
+
+Light exploration of the HTRU2 data set, refer to Table 1, shows that there are 16,259 examples of non pulsar starts caused by RFI/noise, and 1,639 real pulsar examples^[These examples have all been checked by human annotators. Additionally it is clear that legitimate pulsar examples are in the minority, and spurious/non pulsar examples are in the majority.
+
+```{r HTRU2 dataset exploration part1, echo=FALSE, eval=TRUE}
+df <- data.frame(dim(MyData)[1],dim(MyData)[2],count(MyData$target_class == "0"),count(MyData$target_class == "1"))
+colnames(df) <- c('No. Of Rows', 'No. Of Columns', 'No. of Non Pulsars', 'No. of Pulsars') 
+kable(df, caption = "HTRU2 dataset exploration")
+```
+
+Going forward in this **IDV project** we will be using Machine learning algorithms to automatically label pulsar candidates that facilitates rapid analysis as accurately as possible.
+
+# Methods / Analysis
+## HTRU2 data
+
+To make analysis of the dataset more manageable the original column names have been shortened, details in _Table 2_ below.
+
+```{r HTRU2 dataset exploration part2, echo=FALSE, eval=TRUE}
+df2 <- c('mean_ip','sd_ip','exk_ip','skew_ip','mean_ds_c','sd_ds_c','exk_ds_c','skew_ds_c','target')
+df3 <- data.frame(Original_Column_Names = colnames(MyData), Shortened_Column_Names = df2)
+kable(df3, caption = "Renaming Columns")
+colnames(MyData) <- c('mean_ip','sd_ip','exk_ip','skew_ip','mean_ds_c','sd_ds_c','exk_ds_c','skew_ds_c','target')
+```
+
+The HTRU2 data is already in tidy^[https://cran.r-project.org/web/packages/tidyr/vignettes/tidy-data.html] format with the predictors in the first eight columns and the _target_class_ label being the final entry. The _target_class_ labels are 0 (negative) and 1 (positive) with positive meaning it is a pulsar star.
+
+```{r HTRU2 dataset exploration part3, echo=FALSE, eval=TRUE}
+df4 <- head(MyData,10)
+kable(df4, caption = "HTRU2 dataset (First 10 Rows)")
+```
+
+## HTRU2 data exploration
+
+The _target_ label has now been converted to **NP** (negative) and **P** (positive) with positive meaning it is a pulsar star.
+
+```{r HTRU2 dataset exploration part4, echo=TRUE, eval=TRUE, fig.height=4, fig.align='center'}
+#Pulsars "P" & Not Pulsars "NP" Analysis
+MyData$target <- ifelse(MyData$target == 1, "P", "NP")
+MyData %>% gather(predictors, value, -target) %>%
+  ggplot(aes(target, value, fill = target)) +
+  geom_boxplot() +
+  facet_wrap(~predictors, scales = "free", ncol = 4) +
+  theme(axis.text.x = element_blank(), legend.position="bottom")
+```
+
+Review of the graph above shows that while some pulsars have very distinguishable characteristics, which will allow easy identification, others do not. Furthermore its evident that a combination of predictors will give the highest prediction accuracy, it would be difficult to develop such rules manually and where machine learning excels at.
+
+## Create Test and Train set
+Before progressing with experimenting with various different machine learning models we first normalise the data and then create seperate training and test sets.
+```{r Create Test and Train set, echo=TRUE, eval=TRUE, warning=FALSE}
+# Scaling and Preparing Data
+startype <- as.factor(MyData$target)
+pstarpred <- as.matrix(select(MyData, -c(length(MyData))))
+x_centered <- sweep(pstarpred, 2, colMeans(pstarpred))
+x_scaled <- sweep(x_centered, 2, colSds(pstarpred), FUN = "/")
+
+# Create Test and Train set
+set.seed(1, sample.kind = "Rounding")
+test_index <- createDataPartition(startype, times = 1, p = 0.2, list = FALSE)
+test_x <- x_scaled [test_index,]
+test_y <- startype[test_index]
+train_x <- x_scaled [-test_index,]
+train_y <- startype[-test_index]
+```
+
+## Machine Learning - Introduction
+We explored 5^[https://analyticsindiamag.com/7-types-classification-algorithms/] different classification algorithms (Logistic Regression (glm), Naïve Bayes (naive_bayes), K-Nearest Neighbours (knn), Decision Tree (rpart), and Random Forest (rf) to assess which one would provide the prediction accuracy. 
+
+For each of the algorithm assessments we will use the same _trainControl_ method of 5 x k-fold **Cross Validation** repeated 3 times, finally each assessment will show the code used, the best tuning parameter if available and the accuracy of the subject algorithm. 
+
+```{r training method, echo=TRUE, eval=TRUE, warning=FALSE}
+#training method
+tr <- trainControl(method = "repeatedcv",
+                   number = 5,
+                   repeats = 3)
+```
+
+### Machine Learning - Logistic regression algorithm
+```{r Logistic regression algorithm, echo=TRUE, eval=TRUE, warning=FALSE}
+# Logistic regression algorithm
+train_glm <- train(train_x, 
+                   train_y,
+                   method = "glm",
+                   tuneLength=10,
+                   trControl = tr)
+glm_preds <- predict(train_glm, test_x)
+glm_cm <- confusionMatrix(glm_preds, test_y)
+glm_cm$overall["Accuracy"]
+```
+
+### Machine Learning - Naive bayes algorithm
+```{r Naive bayes, echo=TRUE, eval=TRUE, warning=FALSE}
+# Naive bayes algorithm
+set.seed(1, sample.kind = "Rounding")
+train_nb <- train(train_x, 
+                  train_y,
+                  method = "naive_bayes",
+                  tuneLength=10,
+                  trControl = tr)
+nb_preds <- predict(train_nb, test_x)
+train_nb$bestTune
+nb_cm <- confusionMatrix(nb_preds, test_y)
+nb_cm$overall["Accuracy"]
+```
+
+### Machine Learning - K-Nearest Neighbours algorithm
+```{r knn algorithm, echo=TRUE, eval=TRUE, warning=FALSE}
+# knn algorithm
+set.seed(1, sample.kind = "Rounding")
+train_knn <- train(train_x, 
+                   train_y,
+                   method = "knn",
+                   tuneLength=10,
+                   trControl = tr)
+knn_preds <- predict(train_knn, test_x)
+train_knn$bestTune
+```
+
+```{r knn algorithm 2, echo=TRUE, eval=TRUE, warning=FALSE, fig.width=4, fig.height=2.5, fig.align='center'}
+ggplot(train_knn, highlight = TRUE)
+```
+
+```{r knn algorithm 3, echo=TRUE, eval=TRUE, warning=FALSE}
+knn_cm <- confusionMatrix(knn_preds, test_y)
+knn_cm$overall["Accuracy"]
+```
+
+### Machine Learning - Descision Trees algorithm
+```{r Rpart algorithm, echo=TRUE, eval=TRUE, warning=FALSE}
+# Rpart algorithm
+set.seed(1, sample.kind = "Rounding")
+train_rpart <- train(train_x, 
+                     train_y,
+                     method = "rpart",
+                     tuneLength=10,
+                     trControl = tr)
+rpart_preds <- predict(train_rpart, test_x)
+train_rpart$bestTune
+```
+
+```{r Rpart algorithm 2, echo=TRUE, eval=TRUE, warning=FALSE, fig.width=4, fig.height=2.5, fig.align='center'}
+ggplot(train_rpart, highlight = TRUE)
+```
+
+```{r Rpart algorithm 3, echo=TRUE, eval=TRUE, warning=FALSE , fig.height=5, fig.align='center'}
+rpart.plot(train_rpart$finalModel)
+```
+
+The above plot is a good visual example of where machine learning tools can help develop complex rules in very short amounts of time. 
+
+```{r Rpart algorithm 4, echo=TRUE, eval=TRUE, warning=FALSE}
+rpart_cm <- confusionMatrix(rpart_preds, test_y)
+rpart_cm$overall["Accuracy"]
+```
+
+### Machine Learning - Random forest algorithm
+```{r Random forest algorithm, echo=TRUE, eval=TRUE, warning=FALSE}
+# Random forest algorithm
+set.seed(1, sample.kind = "Rounding")
+train_rf <- train(train_x, 
+                  train_y,
+                  method = "rf",
+                  tuneLength=2,
+                  trControl = tr,
+                  ntree= 200,
+                  importance = TRUE)
+rf_preds <- predict(train_rf, test_x)
+train_rf$bestTune
+```
+
+```{r Random forest algorithm 2, echo=TRUE, eval=TRUE, warning=FALSE, fig.width=4, fig.height=2.5, fig.align='center'}
+ggplot(train_rf, highlight = TRUE)
+```
+
+```{r Random forest algorithm 4, echo=TRUE, eval=TRUE, warning=FALSE}
+rf_cm <- confusionMatrix(rf_preds, test_y)
+rf_cm$overall["Accuracy"]
+```
+
+\newpage
+
+# Results
+The algorithm that achieved the highest **accuracy** of **98.16%** was obtained using the **Decision Trees** algorithm. However it was clear that due to our uneven dataset, where legitimate pulsar examples are in the minority (9%) and spurious/non pulsar examples are in the majority (91%), all the algorithms produced results with very sensitivity and not so high specificity. 
+
+As the goal of this project is to find the algorithm that was the **best** predictor for identification of **pulsar stars**, an algorithm with the highest specificity (**Naive Bayes** achieved 88.7%) would be best suited.
+
+Finally the table below shows why the **F1 Score** is more useful than accuracy in cases where datasets are uneven. 
+
+```{r Results, echo=FALSE, eval=TRUE, warning=FALSE}
+# Final Table
+models <- c("Logistic Regression", 
+            "Naive Bayes", 
+            "K-Nearest Neighbours", 
+            "Descision Trees", 
+            "Random forest")
+accuracy <- c(mean(glm_preds == test_y),
+              mean(nb_preds == test_y),
+              mean(knn_preds == test_y),
+              mean(rpart_preds == test_y),
+              mean(rf_preds == test_y))
+sensi <- c(glm_cm$byClass[1],
+           nb_cm$byClass[1],
+           knn_cm$byClass[1],
+           rpart_cm$byClass[1],
+           rf_cm$byClass[1])
+specif<- c(glm_cm$byClass[2],
+           nb_cm$byClass[2],
+           knn_cm$byClass[2],
+           rpart_cm$byClass[2],
+           rf_cm$byClass[2])
+ftab <- data.frame(Model = models, 
+           Accuracy = accuracy, 
+           F1_Score = ifelse(sensi + specif == 0, 0, 2 * sensi * specif / (sensi + specif)),
+           Sensitivity = sensi,
+           Specificity = specif)
+kable(ftab, caption = "HTRU2 dataset - Machine Learning - Scores")
+```
+
+# Conclusion
+In this **IDV project**, we used different machine learning algorithms to improve the prediction accuracy of **Pulsars**^[Pulsars are rotating neutron stars observed to have pulses of radiation at very regular intervals that typically range from milliseconds to seconds - https://imagine.gsfc.nasa.gov/science/objects/neutron_stars1.html]. Exploration of the data^[https://www.kaggle.com/pavanraj159/predicting-a-pulsar-star/download] showed it to have prevalence, in favour of non pulsar stars, and that it would be hard to develop manual rules to accurately predict some of the **Pulsars**. The highest **accuracy** of **98.16%** was obtained using the **Decision Trees** algorithm while the highest **F1 Score** of **93%** was also obtained using the **Naive Bayes** algorithm.
+
+Finally a potential limitation in this study is that we only looked at a small number of the available classification algorithms, therefore further improvement in future work to improve the prediction accuracy would be to look at incorporating other classification algorithms into the study as well as additionally tuning of the machine learning parameters for algorithms with tuning parameters.
