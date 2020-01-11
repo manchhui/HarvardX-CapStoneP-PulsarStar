@@ -8,8 +8,10 @@ if(!require(rpart.plot)) install.packages("rpart.plot", repos = "http://cran.us.
 if(!require(rattle)) install.packages("rattle", repos = "http://cran.us.r-project.org")
 if(!require(RColorBrewer)) install.packages("RColorBrewer", repos = "http://cran.us.r-project.org")
 
-#Load Data
-MyData <- read.csv(file = "pulsar_stars.csv", header = TRUE, sep = ",")
+#Load Data Automatically From Github
+dl <- tempfile()
+download.file("https://raw.githubusercontent.com/manchhui/PulsarStar/master/pulsar_stars.csv", dl)
+MyData <- read.csv(dl)
 
 #Dimension Check
 dim(MyData)[1]
