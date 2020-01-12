@@ -25,11 +25,15 @@ if(!require(gridExtra)) install.packages("gridExtra", repos = "http://cran.us.r-
 if(!require(rpart.plot)) install.packages("rpart.plot", repos = "http://cran.us.r-project.org")
 if(!require(rattle)) install.packages("rattle", repos = "http://cran.us.r-project.org")
 if(!require(RColorBrewer)) install.packages("RColorBrewer", repos = "http://cran.us.r-project.org")
-MyData <- read.csv(file = "pulsar_stars.csv", header = TRUE, sep = ",")
+
+#Load Data Automatically From Github
+dl <- tempfile()
+download.file("https://raw.githubusercontent.com/manchhui/PulsarStar/master/pulsar_stars.csv", dl)
+MyData <- read.csv(dl)
 ```
 
 # Introduction
-This data set, HTRU2^[https://www.kaggle.com/pavanraj159/predicting-a-pulsar-star], used in this **project** describes a sample of pulsar candidates collected during the High Time Resolution Universe Survey.
+The data set, HTRU2^[https://www.kaggle.com/pavanraj159/predicting-a-pulsar-star], used in this **project** describes a sample of pulsar candidates collected during the High Time Resolution Universe Survey.
 
 > "Pulsars are a rare type of Neutron star that produce radio emission detectable here on Earth. As pulsars rotate, their emission beam sweeps across the sky, and when this crosses our line of sight, produces a detectable pattern of broadband radio emission. As pulsars rotate rapidly, this pattern repeats periodically. Thus pulsar search involves looking for periodic radio signals with large radio telescopes.
 >
@@ -37,7 +41,7 @@ This data set, HTRU2^[https://www.kaggle.com/pavanraj159/predicting-a-pulsar-sta
 >
 > By Dr Robert Lyon^[https://www.kaggle.com/pavanraj159/predicting-a-pulsar-star]
 
-Light exploration of the HTRU2 data set, refer to Table 1, shows that there are 16,259 examples of non pulsar starts caused by RFI/noise, and 1,639 real pulsar examples^[These examples have all been checked by human annotators. Additionally it is clear that legitimate pulsar examples are in the minority, and spurious/non pulsar examples are in the majority.
+Light exploration of the HTRU2 data set, refer to Table 1, shows that there are 16,259 examples of non pulsar starts caused by RFI/noise, and 1,639 real pulsar examples^[These examples have all been checked by human annotators.] Additionally it is clear that legitimate pulsar examples are in the minority, and spurious/non pulsar examples are in the majority.
 
 ```{r HTRU2 dataset exploration part1, echo=FALSE, eval=TRUE}
 df <- data.frame(dim(MyData)[1],dim(MyData)[2],count(MyData$target_class == "0"),count(MyData$target_class == "1"))
@@ -80,7 +84,7 @@ MyData %>% gather(predictors, value, -target) %>%
   theme(axis.text.x = element_blank(), legend.position="bottom")
 ```
 
-Review of the graph above shows that while some pulsars have very distinguishable characteristics, which will allow easy identification, others do not. Furthermore its evident that a combination of predictors will give the highest prediction accuracy, it would be difficult to develop such rules manually and where machine learning excels at.
+Review of the graphs above shows that while some pulsars have very distinguishable characteristics, which will allow easy identification, others do not. Furthermore its evident that a combination of predictors will give the highest prediction accuracy, it would be difficult to develop such rules manually and where machine learning excels at.
 
 ## Create Test and Train set
 Before progressing with experimenting with various different machine learning models we first normalise the data and then create seperate training and test sets.
@@ -101,7 +105,7 @@ train_y <- startype[-test_index]
 ```
 
 ## Machine Learning - Introduction
-We explored 5^[https://analyticsindiamag.com/7-types-classification-algorithms/] different classification algorithms (Logistic Regression (glm), Naïve Bayes (naive_bayes), K-Nearest Neighbours (knn), Decision Tree (rpart), and Random Forest (rf) to assess which one would provide the prediction accuracy. 
+We explored 5^[https://analyticsindiamag.com/7-types-classification-algorithms/] different classification algorithms (Logistic Regression (glm), Naïve Bayes (naive_bayes), K-Nearest Neighbours (knn), Decision Tree (rpart), and Random Forest (rf) to assess which ones would provide the prediction best accuracy. 
 
 For each of the algorithm assessments we will use the same _trainControl_ method of 5 x k-fold **Cross Validation** repeated 3 times, finally each assessment will show the code used, the best tuning parameter if available and the accuracy of the subject algorithm. 
 
@@ -217,7 +221,7 @@ rf_cm$overall["Accuracy"]
 \newpage
 
 # Results
-The algorithm that achieved the highest **accuracy** of **98.16%** was obtained using the **Decision Trees** algorithm. However it was clear that due to our uneven dataset, where legitimate pulsar examples are in the minority (9%) and spurious/non pulsar examples are in the majority (91%), all the algorithms produced results with very sensitivity and not so high specificity. 
+The algorithm that achieved the highest **accuracy** of **98.16%** was obtained using the **Decision Trees** algorithm. However it was clear that due to our uneven dataset, where legitimate pulsar examples are in the minority (9%) and spurious/non pulsar examples are in the majority (91%), all the algorithms produced results with very high sensitivity and not so high specificity. 
 
 As the goal of this project is to find the algorithm that was the **best** predictor for identification of **pulsar stars**, an algorithm with the highest specificity (**Naive Bayes** achieved 88.7%) would be best suited.
 
@@ -256,4 +260,4 @@ kable(ftab, caption = "HTRU2 dataset - Machine Learning - Scores")
 # Conclusion
 In this **IDV project**, we used different machine learning algorithms to improve the prediction accuracy of **Pulsars**^[Pulsars are rotating neutron stars observed to have pulses of radiation at very regular intervals that typically range from milliseconds to seconds - https://imagine.gsfc.nasa.gov/science/objects/neutron_stars1.html]. Exploration of the data^[https://www.kaggle.com/pavanraj159/predicting-a-pulsar-star/download] showed it to have prevalence, in favour of non pulsar stars, and that it would be hard to develop manual rules to accurately predict some of the **Pulsars**. The highest **accuracy** of **98.16%** was obtained using the **Decision Trees** algorithm while the highest **F1 Score** of **93%** was also obtained using the **Naive Bayes** algorithm.
 
-Finally a potential limitation in this study is that we only looked at a small number of the available classification algorithms, therefore further improvement in future work to improve the prediction accuracy would be to look at incorporating other classification algorithms into the study as well as additionally tuning of the machine learning parameters for algorithms with tuning parameters.
+Finally a potential limitation in this study is that we only looked at a small number of the available classification algorithms, therefore further improvement in future work to improve the prediction accuracy would be to look at incorporating other classification algorithms into the study as well as additional tuning of the machine learning parameters for algorithms with tuning parameters.
